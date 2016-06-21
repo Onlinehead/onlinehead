@@ -1,0 +1,87 @@
+[
+  
+    {
+      "title"    : "AWS audit: Get logs from CloudTrail and process they by Python",
+      "category" : "",
+      "tags"     : "",
+      "url"      : "http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/",
+      "date"     : "June 21, 2016",
+      "content"  : "Into\nAmazon Web Services is very powerfull platform for create infrastructure for your applications.\nLike in any other big system, we need audit for check action logs to prevent miscakes in our application and, maybe, incrase security. The only one thing which we can use for it - CloudTrail, but it’s ‘display path’ has some problems:\n\n\n  \n    Very simple UI, which can display only some types of action, for get events about other types you need to get it from S3 bucket and read that tons of jsons. Not a greatest way for reading logs.\n  \n  \n    Ugly integration with CloudWatch (imho, CloudWatch is the uglest monitoring system which I seen in a last 5 years). For get details about situation you will need to check it in CloudTrail UI or get json from S3 bucket with logs.\n  \n\n\nBut that is not a problem, because CloudWatch can store it’s logs in S3 in json format, so we can read it by any script. The only one problem with this - how to know when we have new files for processing and need to read it? Of course, we can just sync S3 bucket to local directory each 5 minutes or list all files in S3 and sort it by date, but that is not an Amazon’s way.\n\nFor send information about new log files, CloudWatch has integration with SNS which will send to us notifications about new log with full S3 path of it. Just resolve POST request and get log. Beautiful and simple, yeah? So, let’s use it.\n\nWhat we doing?\n\nNow lets think what result we need:\n\n\n  Resolve detailed email about all events with errors.\n  Able to ignore events from some users (as example, ‘root’) and strings.\n  Send only one email per log file for avoid spam.\n\n\nPreparing\nBefore we will write our script, we need to prepare some additional things:\n\n\n  \n    Setup CloudTrail trail with S3 and SNS.\n\n  \n  \n    Instance in EC2 with access to S3 bucket, where CloudWatch storing it’s logs. I usually using IAM role for grant permission, but regural API credentials is also OK.\n  \n  \n    Python 2.7 with Flask for get POST requests and Boto for access to S3.\n  \n\n\n# sudo pip install virtualenv\n# mkdir virtualenvs &amp;&amp; cd virtualenvs\n# virtualenv cloudwatch_reporter\n# source cloudwatch_reporter/bin/activate\n# pip install boto flask\n\n\n\n\n  Subscribe your EC2 instance to SNS queue for resolve messages. Select any port (it will be better if it will be not standard 80 or 8080).\n\nAlso, don’t forget to give access from anywhere to that port in instance security group.\n\n\nThat is all what we need to prepare.\n\nLet’s code!\nNow we can write our script simple script.\n\nYou can use it as is, but that is more like a skatch, that final application. At least, don’t run Flask by app.run() in production:) Read more about it here.\n\nfrom flask import Flask, request\nfrom boto import route53, ec2, connect_s3\nfrom ConfigParser import SafeConfigParser\nimport optparse\nimport json\nimport logging\nimport smtplib\nimport os\nimport gzip\n\n\n# Prepare custom exceptions\nclass EventValidationError(Exception):\n    pass\n\n# Setup Flask\napp = Flask(__name__)\n\n# Setup logging\nlogging.basicConfig(format=&#39;%(asctime)s:%(levelname)s:%(message)s&#39;, level=logging.INFO)\n\n\n# Parse configuration file\ndef parse_config(config):\n    # Get options from config\n    config_parser = SafeConfigParser()\n    config_parser.read(config)\n    # Yes, here we using global namespace for pass options, in our case it&#39;s not a criminal one, just be careful.\n    global OPTIONS\n    OPTIONS = dict()\n    # Here we will save logs downloaded from S3\n    OPTIONS[&#39;TempDir&#39;] = config_parser.get(&#39;System&#39;, &#39;TempDir&#39;)\n    OPTIONS[&#39;SmtpServer&#39;] = config_parser.get(&#39;System&#39;, &#39;SmtpServer&#39;)\n    # Here and in some other options we will use json format for load arrays from &#39;ini&#39; file.\n    OPTIONS[&#39;MailAlert&#39;] = json.loads(config_parser.get(&#39;AlertSettings&#39;, &#39;MailAlert&#39;))\n    OPTIONS[&#39;MailAlertFrom&#39;] = config_parser.get(&#39;AlertSettings&#39;, &#39;MailAlertFrom&#39;)\n    OPTIONS[&#39;ReportToMail&#39;] = config_parser.getboolean(&#39;AlertSettings&#39;, &#39;ReportToMail&#39;)\n    OPTIONS[&#39;IgnoreErrorCode&#39;] = json.loads(config_parser.get(&#39;IgnoreMessages&#39;, &#39;ErrorCode&#39;))\n    OPTIONS[&#39;IgnoreErrorMessage&#39;] = json.loads(config_parser.get(&#39;IgnoreMessages&#39;, &#39;ErrorMessage&#39;))\n    OPTIONS[&#39;IgnoreUser&#39;] = json.loads(config_parser.get(&#39;IgnoreMessages&#39;, &#39;User&#39;))\n\n\n# Here we adding small wrapper-like function for parse CLI arguments\ndef flaskrun(flaskapp, default_host=&quot;0.0.0.0&quot;, default_port=&quot;32000&quot;):\n    # Set up the command-line options\n    parser = optparse.OptionParser()\n    parser.add_option(&quot;-H&quot;, &quot;--host&quot;,\n                      help=&quot;Hostname of the Flask app &quot; + &quot;[default %s]&quot; % default_host,\n                      default=default_host)\n    parser.add_option(&quot;-P&quot;, &quot;--port&quot;,\n                      help=&quot;Port for the Flask app &quot; + &quot;[default %s]&quot; % default_port,\n                      default=default_port)\n\n    parser.add_option(&quot;-d&quot;, &quot;--debug&quot;,\n                      action=&quot;store_true&quot;, dest=&quot;debug&quot;,\n                      help=optparse.SUPPRESS_HELP)\n\n    parser.add_option(&quot;-c&quot;, &quot;--config&quot;,\n                      help=&quot;Config file path&quot;)\n\n    options, _ = parser.parse_args()\n\n    # Parse config file\n    parse_config(options.config)\n\n    # Run Flask app\n    flaskapp.run(\n        debug=options.debug,\n        host=options.host,\n        port=int(options.port)\n    )\n\n\ndef send_email(message, subject, mail_to, mail_from):\n    logging.info(&#39;Send email&#39;)\n    email_body = &quot;&quot;&quot;\\\nFrom: %s\nTo: %s\nSubject: %s\n\n%s\n&quot;&quot;&quot; % (mail_from, &quot;, &quot;.join(mail_to), subject, message)\n    server = smtplib.SMTP(OPTIONS[&#39;SmtpServer&#39;])\n    server.sendmail(mail_from, mail_to, email_body)\n    server.quit()\n\n\n# Class with provide message processing with send it to email.\n# You can add class with same functions which will, as example, send messages to Slack\nclass MessageProcessorMail:\n    def __init__(self, mail_alert, mail_alert_from):\n        self.Email_messages = []\n        self.Email_users = set()\n        self.mail_alert = mail_alert\n        self.mail_alert_from = mail_alert_from\n\n    def add_to_queue(self, message, user):\n        self.Email_messages.append(message)\n        self.Email_users.add(user)\n\n    def send_messages(self):\n        if self.Email_messages:\n            email_subj = &#39;CloudTrail Alert. Users: {0}&#39;.format(&#39; ,&#39;.join(self.Email_users))\n            send_email(&#39;\\n\\n&#39;.join(self.Email_messages), email_subj, self.mail_alert, self.mail_alert_from)\n\n\nclass EventRecord:\n    def __init__(self, event_data, message_processor):\n        self.event_data = event_data\n        self.message_processor = message_processor\n        # Get regular values which we always has\n        self.event_time = self.event_data[&#39;eventTime&#39;]\n        self.aws_region = self.event_data[&#39;awsRegion&#39;]\n        self.event_name = self.event_data[&#39;eventName&#39;]\n        self.event_source = self.event_data[&#39;eventSource&#39;]\n        self.source_ip = self.event_data[&#39;sourceIPAddress&#39;]\n        self.user_agent = self.event_data[&#39;userAgent&#39;]\n        self.event_type = self.event_data[&#39;eventType&#39;]\n        # That data we will get by other function\n        self.username = &#39;&#39;\n        self.error_code = &#39;&#39;\n        self.error_message = &#39;&#39;\n        self.report_to_mail = False\n        self.ignore = False\n\n        self._parse_event()\n\n    def _parse_event(self):\n        self._get_username()\n        self._get_errors()\n        self._event_filter()\n        self._is_it_alarm()\n\n    # Get username depend of userIdentity type\n    # Depend of Identity type amazon send username in different place of json tree\n    def _get_username(self):\n        if self.event_data[&#39;userIdentity&#39;][&#39;type&#39;] == &#39;IAMUser&#39;:\n            self.username = self.event_data[&#39;userIdentity&#39;][&#39;userName&#39;]\n        elif self.event_data[&#39;userIdentity&#39;][&#39;type&#39;] == &#39;AssumedRole&#39;:\n            self.username = self.event_data[&#39;userIdentity&#39;][&#39;sessionContext&#39;][&#39;sessionIssuer&#39;][&#39;userName&#39;]\n        elif self.event_data[&#39;userIdentity&#39;][&#39;type&#39;] == &#39;Root&#39;:\n            self.username = &#39;root&#39;\n        else:\n            logging.error(json.dumps(self.event_data))\n            raise EventValidationError(&#39;Cannot get username&#39;)\n\n    # Get errors from event\n    def _get_errors(self):\n        if &#39;errorMessage&#39; in self.event_data:\n            self.error_message = self.event_data[&#39;errorMessage&#39;]\n            logging.info(&#39;Has errorMessage&#39;)\n        if &#39;errorCode&#39; in self.event_data:\n            logging.info(&#39;Has errorCode&#39;)\n            self.error_code = self.event_data[&#39;errorCode&#39;]\n\n    def _is_it_alarm(self):\n        # Mark that event as alarm\n        if OPTIONS[&#39;ReportToMail&#39;] and not self.ignore:\n            if self.error_code or self.error_message:\n                logging.info(&#39;Is alarm&#39;)\n                self.report_to_mail = True\n\n    # Here we can add some custom filters for ignore some types of errors\n    def _event_filter(self):\n        # Here we can add some additional processing\n        # Filter by ErrorMessage value\n        for ignore_line in OPTIONS[&#39;IgnoreErrorMessage&#39;]:\n            if ignore_line in self.error_message:\n                logging.info(&#39;Line &quot;{0}&quot; in ErrorMessage match, ignore event&#39;.format(ignore_line))\n                self.ignore = True\n                return\n        # Filter by User\n        for user in OPTIONS[&#39;IgnoreUser&#39;]:\n            if self.username == user:\n                logging.info(&#39;That is action by {0}, ignore it&#39;.format(user))\n                self.ignore = True\n                return\n        # Filter by ErrorCode value\n        for ignore_line in OPTIONS[&#39;IgnoreErrorCode&#39;]:\n            if ignore_line in self.error_code:\n                logging.info(&#39;Line &quot;{0}&quot; in ErrorCode match, ignore event&#39;.format(ignore_line))\n                self.ignore = True\n                return\n\n    # That is function for call message processing outside of class\n    def process_event(self):\n        if not self.ignore:\n            if self.report_to_mail:\n                self._report_to_mail()\n            else:\n                self._process_info()\n\n    # Here we processing events with &#39;Alarm&#39; state\n    def _report_to_mail(self):\n        logging.debug(&#39;For that message we need to send alarm&#39;)\n        message = &#39;Time: {0}\\nUser: {1}\\nFrom: {2}({3})\\nRequest: {4}\\nRegion: {5}\\n&#39; \\\n                  &#39;Result: {6}\\nReason: {7}&#39;.format(\n                    self.event_time, self.username, self.source_ip, self.user_agent,\n                    self.event_name, self.aws_region,\n                    self.error_code, self.error_message\n                    )\n        # Add messages to queue\n        self.message_processor.add_to_queue(message, self.username)\n\n    # Here we processing events with &#39;Info&#39; state.\n    # We don&#39;t need to send email for that events, so just print about info to log\n    def _process_info(self):\n        logging.info(&#39;That is just info message with name {0}&#39;.format(self.event_name))\n\n\n# Processing content of downloaded file with CloudWatch logs\ndef process_content(content):\n    # Here we can replace MessageProcessor to some other class\n    # which will provide same functions: add_to_queue and send_messages\n    message_processor = MessageProcessorMail(OPTIONS[&#39;MailAlert&#39;], OPTIONS[&#39;MailAlertFrom&#39;])\n    logging.info(&#39;Processing {0} records&#39;.format(len(content[&#39;Records&#39;])))\n    for record in content[&#39;Records&#39;]:\n        try:\n            logging.debug(record)\n            event = EventRecord(record, message_processor)\n            event.process_event()\n        # Please return EventValidationError exception if you cannot process it correctly\n        except EventValidationError as err:\n            logging.error(err)\n            continue\n    # Send messages to email and TamTam\n    message_processor.send_messages()\n\n\n# Download new archive from S3\ndef get_file_from_s3(bucket, filename):\n    if not os.path.exists(OPTIONS[&#39;TempDir&#39;]):\n        os.makedirs(OPTIONS[&#39;TempDir&#39;])\n    bucket = connect_s3().get_bucket(bucket)\n    downloaded_file = os.path.join(OPTIONS[&#39;TempDir&#39;], os.path.basename(filename))\n    key = bucket.get_key(filename)\n    key.get_contents_to_filename(downloaded_file)\n    return downloaded_file\n\n\n# Get requests from SNS\n@app.route(&quot;/&quot;, methods=[&#39;GET&#39;, &#39;POST&#39;])\ndef request_processor():\n    # It&#39;s always in json\n    data = request.get_json(force=True)\n    logging.info(&#39;Got new message from SNS&#39;)\n    logging.debug(data)\n    logging.debug(data[&#39;Message&#39;])\n    # Parse message from SNS\n    message_data = json.loads(data[&#39;Message&#39;])\n    bucket = message_data[&#39;s3Bucket&#39;]\n    downloaded_files = []\n    for filename in message_data[&#39;s3ObjectKey&#39;]:\n        # Download all new files from S3\n        downloaded_files.append(get_file_from_s3(bucket, filename))\n    # Process all new files\n    for datafile in downloaded_files:\n        with gzip.open(datafile, &#39;rb&#39;) as f:\n            datafile_content = json.load(f)\n        try:\n            process_content(datafile_content)\n        finally:\n            try:\n                os.remove(datafile)\n            except IOError:\n                pass\n    return &quot;OK&quot;\n\n\nif __name__ == &quot;__main__&quot;:\n    flaskrun(app)\n\n\n\nAnd configuration file:\n\n[System]\nTempDir = '/tmp/ct_events/'\nSmtpServer = 'mx.example.com'\n\n[AlertSettings]\nMailAlert = [\"devops@example.com\", \"boss@example.com\"]\nMailAlertFrom = \"cloudtrail_events@example.com\"\nReportToMail = 1\n\n[IgnoreMessages]\nErrorCode = [\"NoSuchWebsiteConfiguration\"]\nErrorMessage = [\"Request limit exceeded\", \"is not authorized to perform\"]\nUser = [\"root\"]\n\n\n\nResult\n\nNow run:\n\n# python cloudwatch_email_reporter.py -c config.ini\n2016-06-21 16:25:50,928:INFO: * Running on http://0.0.0.0:32000/ (Press CTRL+C to quit)\n\n\n\nWhat we doint by that script:\n\n\n  Parse CLI arguments and configuration file\n  Open port and wait messages from SNS.\n  Get S3 path from message and download that files from S3.\n  Read gziped CloudWatch log and create new EventRecord object per event in log.\n  Process content of event\n  Send email if needed\n\n\nIt will be better, if you will add that function before use that script:\n\n\n  Verifying the signatures of messages.\n  Add subscribtion manage.\n\n\nAbout subscrintion manage.\n\nBefore you can resolve SNS messages, you need to confirm your subscrubtion. For that, you must resolve special message with type ‘SubscriptionConfirmation’ with contain ‘SubscribeURL’. That URL you must visit before resolve all other messages. Because that is one-time thing, I didn’t write code for process that message and just visit it by curl. Also, another one way for do it - get ‘Token’ from that message and confirm subscribtion in web interface.\n\nThat’s all, take care your environments!\n",
+      "snippet"  : "Into Amazon Web Services is very powerfull platform for create infrastructure for your applications. Like in any other big system,..."
+    } 
+  
+  ,
+  
+   {
+     
+   } ,
+  
+   {
+     
+        "title"    : "About me",
+        "category" : "",
+        "tags"     : "",
+        "url"      : "http://onlinehead.pro/about/",
+        "date"     : " ",
+        "content"  : "",
+        "snippet"  : " "
+     
+   } ,
+  
+   {
+     
+   } ,
+  
+   {
+     
+        "title"    : "Say Hello",
+        "category" : "",
+        "tags"     : "",
+        "url"      : "http://onlinehead.pro/contact/",
+        "date"     : " ",
+        "content"  : "",
+        "snippet"  : " "
+     
+   } ,
+  
+   {
+     
+   } ,
+  
+   {
+     
+   } ,
+  
+   {
+     
+        "title"    : "Search",
+        "category" : "",
+        "tags"     : "",
+        "url"      : "http://onlinehead.pro/search/",
+        "date"     : " ",
+        "content"  : "",
+        "snippet"  : " "
+     
+   } ,
+  
+   {
+     
+   } ,
+  
+   {
+     
+        "title"    : "Thanks For Your Message",
+        "category" : "",
+        "tags"     : "",
+        "url"      : "http://onlinehead.pro/thanks.html",
+        "date"     : " ",
+        "content"  : "",
+        "snippet"  : " "
+     
+   } ,
+  
+   {
+     
+   } 
+  
+]

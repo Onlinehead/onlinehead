@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html>
+
+<!-- Header: begin -->
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    <!-- Enable responsiveness on mobile devices-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>
+        
+            AWS audit: Get logs from CloudTrail and process they by Python &#8211;
+        
+        onlinehead. work is not a drug
+    </title>
+
+    <!-- Meta information for search engines -->
+    <meta name="author" content="">
+    <meta name="description" content="IT blog. System administrating, DevOps and all other around it.">
+    
+        <meta name="keywords" content="">
+    
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary" />
+    
+        <meta name="twitter:creator" content="@onlinehead" />
+    
+    <meta name="twitter:title" content="AWS audit: Get logs from CloudTrail and process they by Python" />
+    <meta name="twitter:description" content="Into
+Amazon Web Services is very powerfull platform for create infrastructure for your applications.
+Like in any other big system, we need audit for check action logs to prevent miscakes in our application and, maybe, incrase security. The only one thing which we can use for it - CloudTrail, but it’s ‘display path’ has some problems:
+
+" />
+    <meta name="twitter:url" content="http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/" />
+
+    <!-- Open Graph -->
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="AWS audit: Get logs from CloudTrail and process they by Python" />
+    <meta property="og:description" content="Into
+Amazon Web Services is very powerfull platform for create infrastructure for your applications.
+Like in any other big system, we need audit for check action logs to prevent miscakes in our application and, maybe, incrase security. The only one thing which we can use for it - CloudTrail, but it’s ‘display path’ has some problems:
+
+" />
+    <meta property="og:url" content="http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/" />
+    <meta property="og:site_name" content="onlinehead. work is not a drug">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="http://onlinehead.pro/css/trio.css">
+
+    <!-- Social buttons -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+
+    <!-- Set the canonical URL for search engines -->
+    <link rel="canonical" href="http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/">
+
+    <!-- RSS -->
+    <link rel="alternate" type="application/rss+xml" title="RSS Feed for onlinehead. work is <del>not</del> a drug" href="http://onlinehead.pro/feed.xml" />
+
+    <!-- Icons -->
+    <!-- The ?v=8jjamLzmpR simply forces the browser to reload the favicon. Remove after a long time. -->
+    <link rel="apple-touch-icon" sizes="57x57" href="http://onlinehead.pro/apple-touch-icon-57x57.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="60x60" href="http://onlinehead.pro/apple-touch-icon-60x60.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="72x72" href="http://onlinehead.pro/apple-touch-icon-72x72.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="76x76" href="http://onlinehead.pro/apple-touch-icon-76x76.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="114x114" href="http://onlinehead.pro/apple-touch-icon-114x114.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="120x120" href="http://onlinehead.pro/apple-touch-icon-120x120.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="144x144" href="http://onlinehead.pro/apple-touch-icon-144x144.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="152x152" href="http://onlinehead.pro/apple-touch-icon-152x152.png?v=8jjamLzmpR">
+    <link rel="apple-touch-icon" sizes="180x180" href="http://onlinehead.pro/apple-touch-icon-180x180.png?v=8jjamLzmpR">
+    <link rel="icon" type="image/png" href="http://onlinehead.pro/favicon-32x32.png?v=8jjamLzmpR" sizes="32x32">
+    <link rel="icon" type="image/png" href="http://onlinehead.pro/favicon-194x194.png?v=8jjamLzmpR" sizes="194x194">
+    <link rel="icon" type="image/png" href="http://onlinehead.pro/favicon-96x96.png?v=8jjamLzmpR" sizes="96x96">
+    <link rel="icon" type="image/png" href="http://onlinehead.pro/android-chrome-192x192.png?v=8jjamLzmpR" sizes="192x192">
+    <link rel="icon" type="image/png" href="http://onlinehead.pro/favicon-16x16.png?v=8jjamLzmpR" sizes="16x16">
+    <link rel="shortcut icon" href="http://onlinehead.pro/favicon.ico?v=8jjamLzmpR">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="msapplication-TileImage" content="http://onlinehead.pro/mstile-144x144.png?v=8jjamLzmpR">
+</head>
+<!-- Header: end -->
+
+<body>
+<div class="wrapper-for-content-outside-of-footer">
+    <div class="site-title">
+        <a href="http://onlinehead.pro">onlinehead. work is <del>not</del> a drug</a>
+    </div>
+    <div class = "container">
+        <br/>
+
+<div class="post-title">
+    <div class="logo">
+        
+            <i class="fa fa-cloud fa-fw"></i>
+        
+    </div>
+    <div class="title">
+        <h2>AWS audit: Get logs from CloudTrail and process they by Python</h2>
+        
+        <span>
+            <time datetime="2016-06-21T00:00:00+03:00">
+                June 21, 2016
+                
+                    &middot;
+                    <a href="http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/index.html#disqus_thread" data-disqus-identifier="/2016/06/21/get-logs-from-cloudtrail-with-python/"></a>
+                    
+                
+            </time>
+        </span>
+        
+    </div>
+</div>
+
+<div>
+    <br/>
+</div>
+
+<h3 id="into">Into</h3>
+<p><a href="https://aws.amazon.com">Amazon Web Services</a> is very powerfull platform for create infrastructure for your applications.
+Like in any other big system, we need audit for check action logs to prevent miscakes in our application and, maybe, incrase security. The only one thing which we can use for it - <a href="https://aws.amazon.com/cloudtrail/?nc2=h_l3_dm">CloudTrail</a>, but it’s ‘display path’ has some problems:</p>
+
+<ul>
+  <li>
+    <p>Very simple UI, which can display only some types of action, for get events about other types you need to get it from S3 bucket and read that tons of jsons. Not a greatest way for reading logs.</p>
+  </li>
+  <li>
+    <p>Ugly integration with CloudWatch (imho, CloudWatch is the uglest monitoring system which I seen in a last 5 years). For get details about situation you will need to check it in CloudTrail UI or get json from S3 bucket with logs.</p>
+  </li>
+</ul>
+
+<p>But that is not a problem, because CloudWatch can store it’s logs in S3 in json format, so we can read it by any script. The only one problem with this - how to know when we have new files for processing and need to read it? Of course, we can just sync S3 bucket to local directory each 5 minutes or list all files in S3 and sort it by date, but that is not an Amazon’s way.</p>
+
+<p>For send information about new log files, CloudWatch has integration with SNS which will send to us notifications about new log with full S3 path of it. Just resolve POST request and get log. Beautiful and simple, yeah? So, let’s use it.</p>
+
+<h3 id="what-we-doing">What we doing?</h3>
+
+<p>Now lets think what result we need:</p>
+
+<ul>
+  <li>Resolve detailed email about all events with errors.</li>
+  <li>Able to ignore events from some users (as example, ‘root’) and strings.</li>
+  <li>Send only one email per log file for avoid spam.</li>
+</ul>
+
+<h3 id="preparing">Preparing</h3>
+<p>Before we will write our script, we need to prepare some additional things:</p>
+
+<ul>
+  <li>
+    <p>Setup CloudTrail trail with S3 and SNS.
+<img src="http://onlinehead.pro/assets/cloud_trail_settings.png" alt="CloudTrailSettings" /></p>
+  </li>
+  <li>
+    <p>Instance in EC2 with access to S3 bucket, where CloudWatch storing it’s logs. I usually using IAM role for grant permission, but regural API credentials is also OK.</p>
+  </li>
+  <li>
+    <p>Python 2.7 with Flask for get POST requests and Boto for access to S3.</p>
+  </li>
+</ul>
+
+<div class="language-console highlighter-rouge"><pre class="highlight"><code><span class="ni"># </span><span class="nc">sudo</span><span class="kv"> pip install virtualenv
+</span><span class="ni"># </span><span class="nc">mkdir</span><span class="kv"> virtualenvs &amp;&amp; cd virtualenvs
+</span><span class="ni"># </span><span class="nc">virtualenv</span><span class="kv"> cloudwatch_reporter
+</span><span class="ni"># </span><span class="nc">source</span><span class="kv"> cloudwatch_reporter/bin/activate
+</span><span class="ni"># </span><span class="nc">pip</span><span class="kv"> install boto flask
+</span></code></pre>
+</div>
+
+<ul>
+  <li>Subscribe your EC2 instance to SNS queue for resolve messages. Select any port (it will be better if it will be not standard 80 or 8080).
+<img src="http://onlinehead.pro/assets/sns_settings.png" alt="CloudTrailSettings" />
+Also, don’t forget to give access from anywhere to that port in instance security group.</li>
+</ul>
+
+<p>That is all what we need to prepare.</p>
+
+<h3 id="lets-code">Let’s code!</h3>
+<p>Now we can write our script simple script.</p>
+
+<p>You can use it as is, but that is more like a skatch, that final application. At least, don’t run Flask by app.run() in production:) Read more about it <a href="http://flask.pocoo.org/docs/0.11/deploying/">here</a>.</p>
+
+<noscript><pre>from flask import Flask, request
+from boto import route53, ec2, connect_s3
+from ConfigParser import SafeConfigParser
+import optparse
+import json
+import logging
+import smtplib
+import os
+import gzip
+
+
+# Prepare custom exceptions
+class EventValidationError(Exception):
+    pass
+
+# Setup Flask
+app = Flask(__name__)
+
+# Setup logging
+logging.basicConfig(format=&#39;%(asctime)s:%(levelname)s:%(message)s&#39;, level=logging.INFO)
+
+
+# Parse configuration file
+def parse_config(config):
+    # Get options from config
+    config_parser = SafeConfigParser()
+    config_parser.read(config)
+    # Yes, here we using global namespace for pass options, in our case it&#39;s not a criminal one, just be careful.
+    global OPTIONS
+    OPTIONS = dict()
+    # Here we will save logs downloaded from S3
+    OPTIONS[&#39;TempDir&#39;] = config_parser.get(&#39;System&#39;, &#39;TempDir&#39;)
+    OPTIONS[&#39;SmtpServer&#39;] = config_parser.get(&#39;System&#39;, &#39;SmtpServer&#39;)
+    # Here and in some other options we will use json format for load arrays from &#39;ini&#39; file.
+    OPTIONS[&#39;MailAlert&#39;] = json.loads(config_parser.get(&#39;AlertSettings&#39;, &#39;MailAlert&#39;))
+    OPTIONS[&#39;MailAlertFrom&#39;] = config_parser.get(&#39;AlertSettings&#39;, &#39;MailAlertFrom&#39;)
+    OPTIONS[&#39;ReportToMail&#39;] = config_parser.getboolean(&#39;AlertSettings&#39;, &#39;ReportToMail&#39;)
+    OPTIONS[&#39;IgnoreErrorCode&#39;] = json.loads(config_parser.get(&#39;IgnoreMessages&#39;, &#39;ErrorCode&#39;))
+    OPTIONS[&#39;IgnoreErrorMessage&#39;] = json.loads(config_parser.get(&#39;IgnoreMessages&#39;, &#39;ErrorMessage&#39;))
+    OPTIONS[&#39;IgnoreUser&#39;] = json.loads(config_parser.get(&#39;IgnoreMessages&#39;, &#39;User&#39;))
+
+
+# Here we adding small wrapper-like function for parse CLI arguments
+def flaskrun(flaskapp, default_host=&quot;0.0.0.0&quot;, default_port=&quot;32000&quot;):
+    # Set up the command-line options
+    parser = optparse.OptionParser()
+    parser.add_option(&quot;-H&quot;, &quot;--host&quot;,
+                      help=&quot;Hostname of the Flask app &quot; + &quot;[default %s]&quot; % default_host,
+                      default=default_host)
+    parser.add_option(&quot;-P&quot;, &quot;--port&quot;,
+                      help=&quot;Port for the Flask app &quot; + &quot;[default %s]&quot; % default_port,
+                      default=default_port)
+
+    parser.add_option(&quot;-d&quot;, &quot;--debug&quot;,
+                      action=&quot;store_true&quot;, dest=&quot;debug&quot;,
+                      help=optparse.SUPPRESS_HELP)
+
+    parser.add_option(&quot;-c&quot;, &quot;--config&quot;,
+                      help=&quot;Config file path&quot;)
+
+    options, _ = parser.parse_args()
+
+    # Parse config file
+    parse_config(options.config)
+
+    # Run Flask app
+    flaskapp.run(
+        debug=options.debug,
+        host=options.host,
+        port=int(options.port)
+    )
+
+
+def send_email(message, subject, mail_to, mail_from):
+    logging.info(&#39;Send email&#39;)
+    email_body = &quot;&quot;&quot;\
+From: %s
+To: %s
+Subject: %s
+
+%s
+&quot;&quot;&quot; % (mail_from, &quot;, &quot;.join(mail_to), subject, message)
+    server = smtplib.SMTP(OPTIONS[&#39;SmtpServer&#39;])
+    server.sendmail(mail_from, mail_to, email_body)
+    server.quit()
+
+
+# Class with provide message processing with send it to email.
+# You can add class with same functions which will, as example, send messages to Slack
+class MessageProcessorMail:
+    def __init__(self, mail_alert, mail_alert_from):
+        self.Email_messages = []
+        self.Email_users = set()
+        self.mail_alert = mail_alert
+        self.mail_alert_from = mail_alert_from
+
+    def add_to_queue(self, message, user):
+        self.Email_messages.append(message)
+        self.Email_users.add(user)
+
+    def send_messages(self):
+        if self.Email_messages:
+            email_subj = &#39;CloudTrail Alert. Users: {0}&#39;.format(&#39; ,&#39;.join(self.Email_users))
+            send_email(&#39;\n\n&#39;.join(self.Email_messages), email_subj, self.mail_alert, self.mail_alert_from)
+
+
+class EventRecord:
+    def __init__(self, event_data, message_processor):
+        self.event_data = event_data
+        self.message_processor = message_processor
+        # Get regular values which we always has
+        self.event_time = self.event_data[&#39;eventTime&#39;]
+        self.aws_region = self.event_data[&#39;awsRegion&#39;]
+        self.event_name = self.event_data[&#39;eventName&#39;]
+        self.event_source = self.event_data[&#39;eventSource&#39;]
+        self.source_ip = self.event_data[&#39;sourceIPAddress&#39;]
+        self.user_agent = self.event_data[&#39;userAgent&#39;]
+        self.event_type = self.event_data[&#39;eventType&#39;]
+        # That data we will get by other function
+        self.username = &#39;&#39;
+        self.error_code = &#39;&#39;
+        self.error_message = &#39;&#39;
+        self.report_to_mail = False
+        self.ignore = False
+
+        self._parse_event()
+
+    def _parse_event(self):
+        self._get_username()
+        self._get_errors()
+        self._event_filter()
+        self._is_it_alarm()
+
+    # Get username depend of userIdentity type
+    # Depend of Identity type amazon send username in different place of json tree
+    def _get_username(self):
+        if self.event_data[&#39;userIdentity&#39;][&#39;type&#39;] == &#39;IAMUser&#39;:
+            self.username = self.event_data[&#39;userIdentity&#39;][&#39;userName&#39;]
+        elif self.event_data[&#39;userIdentity&#39;][&#39;type&#39;] == &#39;AssumedRole&#39;:
+            self.username = self.event_data[&#39;userIdentity&#39;][&#39;sessionContext&#39;][&#39;sessionIssuer&#39;][&#39;userName&#39;]
+        elif self.event_data[&#39;userIdentity&#39;][&#39;type&#39;] == &#39;Root&#39;:
+            self.username = &#39;root&#39;
+        else:
+            logging.error(json.dumps(self.event_data))
+            raise EventValidationError(&#39;Cannot get username&#39;)
+
+    # Get errors from event
+    def _get_errors(self):
+        if &#39;errorMessage&#39; in self.event_data:
+            self.error_message = self.event_data[&#39;errorMessage&#39;]
+            logging.info(&#39;Has errorMessage&#39;)
+        if &#39;errorCode&#39; in self.event_data:
+            logging.info(&#39;Has errorCode&#39;)
+            self.error_code = self.event_data[&#39;errorCode&#39;]
+
+    def _is_it_alarm(self):
+        # Mark that event as alarm
+        if OPTIONS[&#39;ReportToMail&#39;] and not self.ignore:
+            if self.error_code or self.error_message:
+                logging.info(&#39;Is alarm&#39;)
+                self.report_to_mail = True
+
+    # Here we can add some custom filters for ignore some types of errors
+    def _event_filter(self):
+        # Here we can add some additional processing
+        # Filter by ErrorMessage value
+        for ignore_line in OPTIONS[&#39;IgnoreErrorMessage&#39;]:
+            if ignore_line in self.error_message:
+                logging.info(&#39;Line &quot;{0}&quot; in ErrorMessage match, ignore event&#39;.format(ignore_line))
+                self.ignore = True
+                return
+        # Filter by User
+        for user in OPTIONS[&#39;IgnoreUser&#39;]:
+            if self.username == user:
+                logging.info(&#39;That is action by {0}, ignore it&#39;.format(user))
+                self.ignore = True
+                return
+        # Filter by ErrorCode value
+        for ignore_line in OPTIONS[&#39;IgnoreErrorCode&#39;]:
+            if ignore_line in self.error_code:
+                logging.info(&#39;Line &quot;{0}&quot; in ErrorCode match, ignore event&#39;.format(ignore_line))
+                self.ignore = True
+                return
+
+    # That is function for call message processing outside of class
+    def process_event(self):
+        if not self.ignore:
+            if self.report_to_mail:
+                self._report_to_mail()
+            else:
+                self._process_info()
+
+    # Here we processing events with &#39;Alarm&#39; state
+    def _report_to_mail(self):
+        logging.debug(&#39;For that message we need to send alarm&#39;)
+        message = &#39;Time: {0}\nUser: {1}\nFrom: {2}({3})\nRequest: {4}\nRegion: {5}\n&#39; \
+                  &#39;Result: {6}\nReason: {7}&#39;.format(
+                    self.event_time, self.username, self.source_ip, self.user_agent,
+                    self.event_name, self.aws_region,
+                    self.error_code, self.error_message
+                    )
+        # Add messages to queue
+        self.message_processor.add_to_queue(message, self.username)
+
+    # Here we processing events with &#39;Info&#39; state.
+    # We don&#39;t need to send email for that events, so just print about info to log
+    def _process_info(self):
+        logging.info(&#39;That is just info message with name {0}&#39;.format(self.event_name))
+
+
+# Processing content of downloaded file with CloudWatch logs
+def process_content(content):
+    # Here we can replace MessageProcessor to some other class
+    # which will provide same functions: add_to_queue and send_messages
+    message_processor = MessageProcessorMail(OPTIONS[&#39;MailAlert&#39;], OPTIONS[&#39;MailAlertFrom&#39;])
+    logging.info(&#39;Processing {0} records&#39;.format(len(content[&#39;Records&#39;])))
+    for record in content[&#39;Records&#39;]:
+        try:
+            logging.debug(record)
+            event = EventRecord(record, message_processor)
+            event.process_event()
+        # Please return EventValidationError exception if you cannot process it correctly
+        except EventValidationError as err:
+            logging.error(err)
+            continue
+    # Send messages to email and TamTam
+    message_processor.send_messages()
+
+
+# Download new archive from S3
+def get_file_from_s3(bucket, filename):
+    if not os.path.exists(OPTIONS[&#39;TempDir&#39;]):
+        os.makedirs(OPTIONS[&#39;TempDir&#39;])
+    bucket = connect_s3().get_bucket(bucket)
+    downloaded_file = os.path.join(OPTIONS[&#39;TempDir&#39;], os.path.basename(filename))
+    key = bucket.get_key(filename)
+    key.get_contents_to_filename(downloaded_file)
+    return downloaded_file
+
+
+# Get requests from SNS
+@app.route(&quot;/&quot;, methods=[&#39;GET&#39;, &#39;POST&#39;])
+def request_processor():
+    # It&#39;s always in json
+    data = request.get_json(force=True)
+    logging.info(&#39;Got new message from SNS&#39;)
+    logging.debug(data)
+    logging.debug(data[&#39;Message&#39;])
+    # Parse message from SNS
+    message_data = json.loads(data[&#39;Message&#39;])
+    bucket = message_data[&#39;s3Bucket&#39;]
+    downloaded_files = []
+    for filename in message_data[&#39;s3ObjectKey&#39;]:
+        # Download all new files from S3
+        downloaded_files.append(get_file_from_s3(bucket, filename))
+    # Process all new files
+    for datafile in downloaded_files:
+        with gzip.open(datafile, &#39;rb&#39;) as f:
+            datafile_content = json.load(f)
+        try:
+            process_content(datafile_content)
+        finally:
+            try:
+                os.remove(datafile)
+            except IOError:
+                pass
+    return &quot;OK&quot;
+
+
+if __name__ == &quot;__main__&quot;:
+    flaskrun(app)
+</pre></noscript>
+<script src="https://gist.github.com/Onlinehead/88cbc70cfca2f41b69b82eaba7dc4410.js"> </script>
+
+<p>And configuration file:</p>
+
+<div class="language-ini highlighter-rouge"><pre class="highlight"><code><span class="nn">[System]</span>
+<span class="py">TempDir</span> <span class="p">=</span> <span class="s">'/tmp/ct_events/'</span>
+<span class="py">SmtpServer</span> <span class="p">=</span> <span class="s">'mx.example.com'</span>
+
+<span class="nn">[AlertSettings]</span>
+<span class="py">MailAlert</span> <span class="p">=</span> <span class="s">["devops@example.com", "boss@example.com"]</span>
+<span class="py">MailAlertFrom</span> <span class="p">=</span> <span class="s">"cloudtrail_events@example.com"</span>
+<span class="py">ReportToMail</span> <span class="p">=</span> <span class="s">1</span>
+
+<span class="nn">[IgnoreMessages]</span>
+<span class="py">ErrorCode</span> <span class="p">=</span> <span class="s">["NoSuchWebsiteConfiguration"]</span>
+<span class="py">ErrorMessage</span> <span class="p">=</span> <span class="s">["Request limit exceeded", "is not authorized to perform"]</span>
+<span class="py">User</span> <span class="p">=</span> <span class="s">["root"]</span>
+</code></pre>
+</div>
+
+<h3 id="result">Result</h3>
+
+<p>Now run:</p>
+
+<div class="language-console highlighter-rouge"><pre class="highlight"><code><span class="ni"># </span><span class="nc">python</span><span class="kv"> cloudwatch_email_reporter.py -c config.ini
+</span>2016-06-21 16:25:50,928:INFO: * Running on http://0.0.0.0:32000/ (Press CTRL+C to quit)
+</code></pre>
+</div>
+
+<p>What we doint by that script:</p>
+
+<ol>
+  <li>Parse CLI arguments and configuration file</li>
+  <li>Open port and wait messages from SNS.</li>
+  <li>Get S3 path from message and download that files from S3.</li>
+  <li>Read gziped CloudWatch log and create new EventRecord object per event in log.</li>
+  <li>Process content of event</li>
+  <li>Send email if needed</li>
+</ol>
+
+<p>It will be better, if you will add that function before use that script:</p>
+
+<ol>
+  <li>Verifying the signatures of messages.</li>
+  <li>Add subscribtion manage.</li>
+</ol>
+
+<p>About subscrintion manage.</p>
+
+<p>Before you can resolve SNS messages, you need to confirm your subscrubtion. For that, you must resolve special message with type ‘SubscriptionConfirmation’ with contain ‘SubscribeURL’. That URL you must visit before resolve all other messages. Because that is one-time thing, I didn’t write code for process that message and just visit it by curl. Also, another one way for do it - get ‘Token’ from that message and confirm subscribtion in web interface.</p>
+
+<p>That’s all, take care your environments!</p>
+
+
+<div class="sharing">
+    <br/>
+    <br/>
+<!-- Make an animated slide out drawer later -->
+    <ul>
+        <li><i class="fa fa-share-square-o"></i></li>
+        
+        <li><a href="https://twitter.com/intent/tweet?text=AWS audit: Get logs from CloudTrail and process they by Python&url=http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/" rel="nofollow" target="_blank" title="Share on Twitter">
+                <i class="fa fa-twitter-square"></i>
+        </a></li>
+        
+
+        
+        <li><a href="http://www.linkedin.com/shareArticle?url=http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/&title=AWS audit: Get logs from CloudTrail and process they by Python" rel="nofollow" target="_blank" title="Share on LinkedIn">
+                <i class="fa fa-linkedin-square"></i>
+        </a></li>
+        
+
+        
+        <li><a href="https://facebook.com/sharer.php?u=http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/" rel="nofollow" target="_blank" title="Share on Facebook">
+                <i class="fa fa-facebook-square"></i>
+        </a></li>
+        
+
+        
+        <li><a href="https://plus.google.com/share?url=http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/" rel="nofollow" target="_blank" title="Share on Google+">
+                <i class="fa fa-google-plus-square"></i>
+        </a></li>
+        
+
+        
+        <li><a href="http://reddit.com/submit?url=http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/&title=AWS audit: Get logs from CloudTrail and process they by Python" rel="nofollow" target="_blank" title="Share on Reddit">
+                <i class="fa fa-reddit-square"></i>
+        </a></li>
+        
+    </ul>
+</div>
+
+<br/>
+<br/>
+
+<div id="disqus_thread"></div>
+<!-- Add Disqus comments (not comment count) -->
+<script type="text/javascript">
+    var disqus_shortname  = 'onlinehead';
+    var disqus_identifier = '/2016/06/21/get-logs-from-cloudtrail-with-python/';
+    var disqus_title      = 'AWS audit: Get logs from CloudTrail and process they by Python';
+    var disqus_url        = 'http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/';
+    // var disqus_developer = 1; // Comment out when the site is live
+
+    (function() {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+
+<!-- Add Disqus comment count (not the comments) -->
+<script type="text/javascript">
+  /* * * CONFIGURATION VARIABLES * * */
+  var disqus_shortname  = 'onlinehead';
+  // var disqus_developer = 1; // Comment out when the site is live
+
+  /* * * DON'T EDIT BELOW THIS LINE * * */
+  (function () {
+      var s = document.createElement('script'); s.async = true;
+      s.type = 'text/javascript';
+      s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+      (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+  }());
+</script>
+
+<noscript>
+    Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+</noscript>
+
+
+
+    </div>
+</div>
+
+
+<!-- Some empty space between the page counter and footer -->
+<div>
+    <br/><br/><br/><br/>
+</div>
+
+
+<!-- Footer: begin -->
+<footer class="stickyfooter" role="contentinfo">
+  <div class="footer-logo">
+    <a href="http://onlinehead.pro"><i class="fa fa-cog fa-spin"></i></a>
+  </div>
+    <ul>
+      <li><a href="http://onlinehead.pro/about/">About</a></li>
+      <li><a href="http://onlinehead.pro/contact/">Contact</a></li>
+      <li><a href="http://onlinehead.pro/search/">Search</a></li>
+    </ul>
+
+    <div class="footer-secondary-links">
+      <ul>
+        <li>Powered by <a href="http://jekyllrb.com/">Jekyll</a>
+        using the <a href="http://onlinehead.pro">Trio</a> theme
+        </li>
+      </ul>
+
+      <ul class="footer-social">
+        <li><a href="http://onlinehead.pro/feed.xml">
+                <i class="fa fa-rss-square"></i>
+        </a></li>
+        
+            <li><a href="http://github.com/onlinehead">
+                <i class="fa fa-github-square"></i>
+            </a></li>
+        
+
+        
+            <li><a href="http://twitter.com/onlinehead">
+                <i class="fa fa-twitter-square"></i>
+            </a></li>
+        
+
+        
+            <li><a href="http://linkedin.com/in/onlinehead/en">
+                <i class="fa fa-linkedin-square"></i>
+            </a></li>
+        
+
+        
+
+        
+
+        
+      </ul>
+    </div>
+    <!-- This removes the small sliver of whitespace at the end of the page -->
+    <br/>
+</footer>
+<!-- Footer: end -->
+
+</body>
+</html>

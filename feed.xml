@@ -1,0 +1,406 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>onlinehead. work is &lt;del&gt;not&lt;/del&gt; a drug</title>
+    <description>IT blog. System administrating, DevOps and all other around it.</description>
+    <link>http://onlinehead.pro/</link>
+    <atom:link href="http://onlinehead.pro/feed.xml" rel="self" type="application/rss+xml" />
+    
+      <item>
+        <title>AWS audit: Get logs from CloudTrail and process they by Python</title>
+        <description>&lt;h3 id=&quot;into&quot;&gt;Into&lt;/h3&gt;
+&lt;p&gt;&lt;a href=&quot;https://aws.amazon.com&quot;&gt;Amazon Web Services&lt;/a&gt; is very powerfull platform for create infrastructure for your applications.
+Like in any other big system, we need audit for check action logs to prevent miscakes in our application and, maybe, incrase security. The only one thing which we can use for it - &lt;a href=&quot;https://aws.amazon.com/cloudtrail/?nc2=h_l3_dm&quot;&gt;CloudTrail&lt;/a&gt;, but it’s ‘display path’ has some problems:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;Very simple UI, which can display only some types of action, for get events about other types you need to get it from S3 bucket and read that tons of jsons. Not a greatest way for reading logs.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Ugly integration with CloudWatch (imho, CloudWatch is the uglest monitoring system which I seen in a last 5 years). For get details about situation you will need to check it in CloudTrail UI or get json from S3 bucket with logs.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;But that is not a problem, because CloudWatch can store it’s logs in S3 in json format, so we can read it by any script. The only one problem with this - how to know when we have new files for processing and need to read it? Of course, we can just sync S3 bucket to local directory each 5 minutes or list all files in S3 and sort it by date, but that is not an Amazon’s way.&lt;/p&gt;
+
+&lt;p&gt;For send information about new log files, CloudWatch has integration with SNS which will send to us notifications about new log with full S3 path of it. Just resolve POST request and get log. Beautiful and simple, yeah? So, let’s use it.&lt;/p&gt;
+
+&lt;h3 id=&quot;what-we-doing&quot;&gt;What we doing?&lt;/h3&gt;
+
+&lt;p&gt;Now lets think what result we need:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Resolve detailed email about all events with errors.&lt;/li&gt;
+  &lt;li&gt;Able to ignore events from some users (as example, ‘root’) and strings.&lt;/li&gt;
+  &lt;li&gt;Send only one email per log file for avoid spam.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;preparing&quot;&gt;Preparing&lt;/h3&gt;
+&lt;p&gt;Before we will write our script, we need to prepare some additional things:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;Setup CloudTrail trail with S3 and SNS.
+&lt;img src=&quot;http://onlinehead.pro/assets/cloud_trail_settings.png&quot; alt=&quot;CloudTrailSettings&quot; /&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Instance in EC2 with access to S3 bucket, where CloudWatch storing it’s logs. I usually using IAM role for grant permission, but regural API credentials is also OK.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Python 2.7 with Flask for get POST requests and Boto for access to S3.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;ni&quot;&gt;# &lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;sudo&lt;/span&gt;&lt;span class=&quot;kv&quot;&gt; pip install virtualenv
+&lt;/span&gt;&lt;span class=&quot;ni&quot;&gt;# &lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;mkdir&lt;/span&gt;&lt;span class=&quot;kv&quot;&gt; virtualenvs &amp;amp;&amp;amp; cd virtualenvs
+&lt;/span&gt;&lt;span class=&quot;ni&quot;&gt;# &lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;virtualenv&lt;/span&gt;&lt;span class=&quot;kv&quot;&gt; cloudwatch_reporter
+&lt;/span&gt;&lt;span class=&quot;ni&quot;&gt;# &lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;source&lt;/span&gt;&lt;span class=&quot;kv&quot;&gt; cloudwatch_reporter/bin/activate
+&lt;/span&gt;&lt;span class=&quot;ni&quot;&gt;# &lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;pip&lt;/span&gt;&lt;span class=&quot;kv&quot;&gt; install boto flask
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Subscribe your EC2 instance to SNS queue for resolve messages. Select any port (it will be better if it will be not standard 80 or 8080).
+&lt;img src=&quot;http://onlinehead.pro/assets/sns_settings.png&quot; alt=&quot;CloudTrailSettings&quot; /&gt;
+Also, don’t forget to give access from anywhere to that port in instance security group.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;That is all what we need to prepare.&lt;/p&gt;
+
+&lt;h3 id=&quot;lets-code&quot;&gt;Let’s code!&lt;/h3&gt;
+&lt;p&gt;Now we can write our script simple script.&lt;/p&gt;
+
+&lt;p&gt;You can use it as is, but that is more like a skatch, that final application. At least, don’t run Flask by app.run() in production:) Read more about it &lt;a href=&quot;http://flask.pocoo.org/docs/0.11/deploying/&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;noscript&gt;&lt;pre&gt;from flask import Flask, request
+from boto import route53, ec2, connect_s3
+from ConfigParser import SafeConfigParser
+import optparse
+import json
+import logging
+import smtplib
+import os
+import gzip
+
+
+# Prepare custom exceptions
+class EventValidationError(Exception):
+    pass
+
+# Setup Flask
+app = Flask(__name__)
+
+# Setup logging
+logging.basicConfig(format=&amp;#39;%(asctime)s:%(levelname)s:%(message)s&amp;#39;, level=logging.INFO)
+
+
+# Parse configuration file
+def parse_config(config):
+    # Get options from config
+    config_parser = SafeConfigParser()
+    config_parser.read(config)
+    # Yes, here we using global namespace for pass options, in our case it&amp;#39;s not a criminal one, just be careful.
+    global OPTIONS
+    OPTIONS = dict()
+    # Here we will save logs downloaded from S3
+    OPTIONS[&amp;#39;TempDir&amp;#39;] = config_parser.get(&amp;#39;System&amp;#39;, &amp;#39;TempDir&amp;#39;)
+    OPTIONS[&amp;#39;SmtpServer&amp;#39;] = config_parser.get(&amp;#39;System&amp;#39;, &amp;#39;SmtpServer&amp;#39;)
+    # Here and in some other options we will use json format for load arrays from &amp;#39;ini&amp;#39; file.
+    OPTIONS[&amp;#39;MailAlert&amp;#39;] = json.loads(config_parser.get(&amp;#39;AlertSettings&amp;#39;, &amp;#39;MailAlert&amp;#39;))
+    OPTIONS[&amp;#39;MailAlertFrom&amp;#39;] = config_parser.get(&amp;#39;AlertSettings&amp;#39;, &amp;#39;MailAlertFrom&amp;#39;)
+    OPTIONS[&amp;#39;ReportToMail&amp;#39;] = config_parser.getboolean(&amp;#39;AlertSettings&amp;#39;, &amp;#39;ReportToMail&amp;#39;)
+    OPTIONS[&amp;#39;IgnoreErrorCode&amp;#39;] = json.loads(config_parser.get(&amp;#39;IgnoreMessages&amp;#39;, &amp;#39;ErrorCode&amp;#39;))
+    OPTIONS[&amp;#39;IgnoreErrorMessage&amp;#39;] = json.loads(config_parser.get(&amp;#39;IgnoreMessages&amp;#39;, &amp;#39;ErrorMessage&amp;#39;))
+    OPTIONS[&amp;#39;IgnoreUser&amp;#39;] = json.loads(config_parser.get(&amp;#39;IgnoreMessages&amp;#39;, &amp;#39;User&amp;#39;))
+
+
+# Here we adding small wrapper-like function for parse CLI arguments
+def flaskrun(flaskapp, default_host=&amp;quot;0.0.0.0&amp;quot;, default_port=&amp;quot;32000&amp;quot;):
+    # Set up the command-line options
+    parser = optparse.OptionParser()
+    parser.add_option(&amp;quot;-H&amp;quot;, &amp;quot;--host&amp;quot;,
+                      help=&amp;quot;Hostname of the Flask app &amp;quot; + &amp;quot;[default %s]&amp;quot; % default_host,
+                      default=default_host)
+    parser.add_option(&amp;quot;-P&amp;quot;, &amp;quot;--port&amp;quot;,
+                      help=&amp;quot;Port for the Flask app &amp;quot; + &amp;quot;[default %s]&amp;quot; % default_port,
+                      default=default_port)
+
+    parser.add_option(&amp;quot;-d&amp;quot;, &amp;quot;--debug&amp;quot;,
+                      action=&amp;quot;store_true&amp;quot;, dest=&amp;quot;debug&amp;quot;,
+                      help=optparse.SUPPRESS_HELP)
+
+    parser.add_option(&amp;quot;-c&amp;quot;, &amp;quot;--config&amp;quot;,
+                      help=&amp;quot;Config file path&amp;quot;)
+
+    options, _ = parser.parse_args()
+
+    # Parse config file
+    parse_config(options.config)
+
+    # Run Flask app
+    flaskapp.run(
+        debug=options.debug,
+        host=options.host,
+        port=int(options.port)
+    )
+
+
+def send_email(message, subject, mail_to, mail_from):
+    logging.info(&amp;#39;Send email&amp;#39;)
+    email_body = &amp;quot;&amp;quot;&amp;quot;\
+From: %s
+To: %s
+Subject: %s
+
+%s
+&amp;quot;&amp;quot;&amp;quot; % (mail_from, &amp;quot;, &amp;quot;.join(mail_to), subject, message)
+    server = smtplib.SMTP(OPTIONS[&amp;#39;SmtpServer&amp;#39;])
+    server.sendmail(mail_from, mail_to, email_body)
+    server.quit()
+
+
+# Class with provide message processing with send it to email.
+# You can add class with same functions which will, as example, send messages to Slack
+class MessageProcessorMail:
+    def __init__(self, mail_alert, mail_alert_from):
+        self.Email_messages = []
+        self.Email_users = set()
+        self.mail_alert = mail_alert
+        self.mail_alert_from = mail_alert_from
+
+    def add_to_queue(self, message, user):
+        self.Email_messages.append(message)
+        self.Email_users.add(user)
+
+    def send_messages(self):
+        if self.Email_messages:
+            email_subj = &amp;#39;CloudTrail Alert. Users: {0}&amp;#39;.format(&amp;#39; ,&amp;#39;.join(self.Email_users))
+            send_email(&amp;#39;\n\n&amp;#39;.join(self.Email_messages), email_subj, self.mail_alert, self.mail_alert_from)
+
+
+class EventRecord:
+    def __init__(self, event_data, message_processor):
+        self.event_data = event_data
+        self.message_processor = message_processor
+        # Get regular values which we always has
+        self.event_time = self.event_data[&amp;#39;eventTime&amp;#39;]
+        self.aws_region = self.event_data[&amp;#39;awsRegion&amp;#39;]
+        self.event_name = self.event_data[&amp;#39;eventName&amp;#39;]
+        self.event_source = self.event_data[&amp;#39;eventSource&amp;#39;]
+        self.source_ip = self.event_data[&amp;#39;sourceIPAddress&amp;#39;]
+        self.user_agent = self.event_data[&amp;#39;userAgent&amp;#39;]
+        self.event_type = self.event_data[&amp;#39;eventType&amp;#39;]
+        # That data we will get by other function
+        self.username = &amp;#39;&amp;#39;
+        self.error_code = &amp;#39;&amp;#39;
+        self.error_message = &amp;#39;&amp;#39;
+        self.report_to_mail = False
+        self.ignore = False
+
+        self._parse_event()
+
+    def _parse_event(self):
+        self._get_username()
+        self._get_errors()
+        self._event_filter()
+        self._is_it_alarm()
+
+    # Get username depend of userIdentity type
+    # Depend of Identity type amazon send username in different place of json tree
+    def _get_username(self):
+        if self.event_data[&amp;#39;userIdentity&amp;#39;][&amp;#39;type&amp;#39;] == &amp;#39;IAMUser&amp;#39;:
+            self.username = self.event_data[&amp;#39;userIdentity&amp;#39;][&amp;#39;userName&amp;#39;]
+        elif self.event_data[&amp;#39;userIdentity&amp;#39;][&amp;#39;type&amp;#39;] == &amp;#39;AssumedRole&amp;#39;:
+            self.username = self.event_data[&amp;#39;userIdentity&amp;#39;][&amp;#39;sessionContext&amp;#39;][&amp;#39;sessionIssuer&amp;#39;][&amp;#39;userName&amp;#39;]
+        elif self.event_data[&amp;#39;userIdentity&amp;#39;][&amp;#39;type&amp;#39;] == &amp;#39;Root&amp;#39;:
+            self.username = &amp;#39;root&amp;#39;
+        else:
+            logging.error(json.dumps(self.event_data))
+            raise EventValidationError(&amp;#39;Cannot get username&amp;#39;)
+
+    # Get errors from event
+    def _get_errors(self):
+        if &amp;#39;errorMessage&amp;#39; in self.event_data:
+            self.error_message = self.event_data[&amp;#39;errorMessage&amp;#39;]
+            logging.info(&amp;#39;Has errorMessage&amp;#39;)
+        if &amp;#39;errorCode&amp;#39; in self.event_data:
+            logging.info(&amp;#39;Has errorCode&amp;#39;)
+            self.error_code = self.event_data[&amp;#39;errorCode&amp;#39;]
+
+    def _is_it_alarm(self):
+        # Mark that event as alarm
+        if OPTIONS[&amp;#39;ReportToMail&amp;#39;] and not self.ignore:
+            if self.error_code or self.error_message:
+                logging.info(&amp;#39;Is alarm&amp;#39;)
+                self.report_to_mail = True
+
+    # Here we can add some custom filters for ignore some types of errors
+    def _event_filter(self):
+        # Here we can add some additional processing
+        # Filter by ErrorMessage value
+        for ignore_line in OPTIONS[&amp;#39;IgnoreErrorMessage&amp;#39;]:
+            if ignore_line in self.error_message:
+                logging.info(&amp;#39;Line &amp;quot;{0}&amp;quot; in ErrorMessage match, ignore event&amp;#39;.format(ignore_line))
+                self.ignore = True
+                return
+        # Filter by User
+        for user in OPTIONS[&amp;#39;IgnoreUser&amp;#39;]:
+            if self.username == user:
+                logging.info(&amp;#39;That is action by {0}, ignore it&amp;#39;.format(user))
+                self.ignore = True
+                return
+        # Filter by ErrorCode value
+        for ignore_line in OPTIONS[&amp;#39;IgnoreErrorCode&amp;#39;]:
+            if ignore_line in self.error_code:
+                logging.info(&amp;#39;Line &amp;quot;{0}&amp;quot; in ErrorCode match, ignore event&amp;#39;.format(ignore_line))
+                self.ignore = True
+                return
+
+    # That is function for call message processing outside of class
+    def process_event(self):
+        if not self.ignore:
+            if self.report_to_mail:
+                self._report_to_mail()
+            else:
+                self._process_info()
+
+    # Here we processing events with &amp;#39;Alarm&amp;#39; state
+    def _report_to_mail(self):
+        logging.debug(&amp;#39;For that message we need to send alarm&amp;#39;)
+        message = &amp;#39;Time: {0}\nUser: {1}\nFrom: {2}({3})\nRequest: {4}\nRegion: {5}\n&amp;#39; \
+                  &amp;#39;Result: {6}\nReason: {7}&amp;#39;.format(
+                    self.event_time, self.username, self.source_ip, self.user_agent,
+                    self.event_name, self.aws_region,
+                    self.error_code, self.error_message
+                    )
+        # Add messages to queue
+        self.message_processor.add_to_queue(message, self.username)
+
+    # Here we processing events with &amp;#39;Info&amp;#39; state.
+    # We don&amp;#39;t need to send email for that events, so just print about info to log
+    def _process_info(self):
+        logging.info(&amp;#39;That is just info message with name {0}&amp;#39;.format(self.event_name))
+
+
+# Processing content of downloaded file with CloudWatch logs
+def process_content(content):
+    # Here we can replace MessageProcessor to some other class
+    # which will provide same functions: add_to_queue and send_messages
+    message_processor = MessageProcessorMail(OPTIONS[&amp;#39;MailAlert&amp;#39;], OPTIONS[&amp;#39;MailAlertFrom&amp;#39;])
+    logging.info(&amp;#39;Processing {0} records&amp;#39;.format(len(content[&amp;#39;Records&amp;#39;])))
+    for record in content[&amp;#39;Records&amp;#39;]:
+        try:
+            logging.debug(record)
+            event = EventRecord(record, message_processor)
+            event.process_event()
+        # Please return EventValidationError exception if you cannot process it correctly
+        except EventValidationError as err:
+            logging.error(err)
+            continue
+    # Send messages to email and TamTam
+    message_processor.send_messages()
+
+
+# Download new archive from S3
+def get_file_from_s3(bucket, filename):
+    if not os.path.exists(OPTIONS[&amp;#39;TempDir&amp;#39;]):
+        os.makedirs(OPTIONS[&amp;#39;TempDir&amp;#39;])
+    bucket = connect_s3().get_bucket(bucket)
+    downloaded_file = os.path.join(OPTIONS[&amp;#39;TempDir&amp;#39;], os.path.basename(filename))
+    key = bucket.get_key(filename)
+    key.get_contents_to_filename(downloaded_file)
+    return downloaded_file
+
+
+# Get requests from SNS
+@app.route(&amp;quot;/&amp;quot;, methods=[&amp;#39;GET&amp;#39;, &amp;#39;POST&amp;#39;])
+def request_processor():
+    # It&amp;#39;s always in json
+    data = request.get_json(force=True)
+    logging.info(&amp;#39;Got new message from SNS&amp;#39;)
+    logging.debug(data)
+    logging.debug(data[&amp;#39;Message&amp;#39;])
+    # Parse message from SNS
+    message_data = json.loads(data[&amp;#39;Message&amp;#39;])
+    bucket = message_data[&amp;#39;s3Bucket&amp;#39;]
+    downloaded_files = []
+    for filename in message_data[&amp;#39;s3ObjectKey&amp;#39;]:
+        # Download all new files from S3
+        downloaded_files.append(get_file_from_s3(bucket, filename))
+    # Process all new files
+    for datafile in downloaded_files:
+        with gzip.open(datafile, &amp;#39;rb&amp;#39;) as f:
+            datafile_content = json.load(f)
+        try:
+            process_content(datafile_content)
+        finally:
+            try:
+                os.remove(datafile)
+            except IOError:
+                pass
+    return &amp;quot;OK&amp;quot;
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    flaskrun(app)
+&lt;/pre&gt;&lt;/noscript&gt;
+&lt;script src=&quot;https://gist.github.com/Onlinehead/88cbc70cfca2f41b69b82eaba7dc4410.js&quot;&gt; &lt;/script&gt;
+
+&lt;p&gt;And configuration file:&lt;/p&gt;
+
+&lt;div class=&quot;language-ini highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nn&quot;&gt;[System]&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;TempDir&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&#39;/tmp/ct_events/&#39;&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;SmtpServer&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&#39;mx.example.com&#39;&lt;/span&gt;
+
+&lt;span class=&quot;nn&quot;&gt;[AlertSettings]&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;MailAlert&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;[&quot;devops@example.com&quot;, &quot;boss@example.com&quot;]&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;MailAlertFrom&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;cloudtrail_events@example.com&quot;&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;ReportToMail&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;1&lt;/span&gt;
+
+&lt;span class=&quot;nn&quot;&gt;[IgnoreMessages]&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;ErrorCode&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;[&quot;NoSuchWebsiteConfiguration&quot;]&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;ErrorMessage&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;[&quot;Request limit exceeded&quot;, &quot;is not authorized to perform&quot;]&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;User&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;[&quot;root&quot;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;h3 id=&quot;result&quot;&gt;Result&lt;/h3&gt;
+
+&lt;p&gt;Now run:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;ni&quot;&gt;# &lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;python&lt;/span&gt;&lt;span class=&quot;kv&quot;&gt; cloudwatch_email_reporter.py -c config.ini
+&lt;/span&gt;2016-06-21 16:25:50,928:INFO: * Running on http://0.0.0.0:32000/ (Press CTRL+C to quit)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;What we doint by that script:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Parse CLI arguments and configuration file&lt;/li&gt;
+  &lt;li&gt;Open port and wait messages from SNS.&lt;/li&gt;
+  &lt;li&gt;Get S3 path from message and download that files from S3.&lt;/li&gt;
+  &lt;li&gt;Read gziped CloudWatch log and create new EventRecord object per event in log.&lt;/li&gt;
+  &lt;li&gt;Process content of event&lt;/li&gt;
+  &lt;li&gt;Send email if needed&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;It will be better, if you will add that function before use that script:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Verifying the signatures of messages.&lt;/li&gt;
+  &lt;li&gt;Add subscribtion manage.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;About subscrintion manage.&lt;/p&gt;
+
+&lt;p&gt;Before you can resolve SNS messages, you need to confirm your subscrubtion. For that, you must resolve special message with type ‘SubscriptionConfirmation’ with contain ‘SubscribeURL’. That URL you must visit before resolve all other messages. Because that is one-time thing, I didn’t write code for process that message and just visit it by curl. Also, another one way for do it - get ‘Token’ from that message and confirm subscribtion in web interface.&lt;/p&gt;
+
+&lt;p&gt;That’s all, take care your environments!&lt;/p&gt;
+</description>
+        <pubDate>Tue, 21 Jun 2016 00:00:00 +0300</pubDate>
+        <link>http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/</link>
+        <guid isPermaLink="true">http://onlinehead.pro/2016/06/21/get-logs-from-cloudtrail-with-python/</guid>
+      </item>
+    
+  </channel>
+</rss>
